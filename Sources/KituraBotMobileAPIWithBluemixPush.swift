@@ -2,7 +2,7 @@
 //  KituraBotMobileAPIWithBluemixPush.swift
 //  KituraBotMobileAPIWithBluemixPush
 //
-//  Created by Jacopo Mangiavacchi on 10/3/16.
+//  Created by Jacopo Mangiavacchi on 10/7/16.
 //
 //
 
@@ -11,7 +11,7 @@ import SwiftyJSON
 import Kitura
 import LoggerAPI
 import KituraBot
-import ToriAPNS
+import BluemixPushNotifications
 
 
 // MARK KituraBotMobileAPIWithBluemixPush
@@ -21,12 +21,12 @@ import ToriAPNS
 /// for more information.
 public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
     public var channelName: String?
-
+    
     private var botProtocolMessageNotificationHandler: BotInternalMessageNotificationHandler?
     private let securityToken: String
     private let webHookPath: String
-    private let push: APNS
-    private let topic: String 
+    
+    private let pushNotifications: PushNotifications
     
     
     
@@ -34,13 +34,11 @@ public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
     ///
     /// - Parameter securityToken: Arbitrary value used to validate a call.
     /// - Parameter webHookPath: URI for the Mobile API.
-    public init(securityToken: String, webHookPath: String, filePathCrt: String, filePathKey: String, topic: String) {
+    public init(securityToken: String, webHookPath: String, bluemixRegion: String, bluemixAppGuid: String, bluemixAppSecret: String) {
         self.securityToken = securityToken
         self.webHookPath = webHookPath
-        self.topic = topic
-
-        let cert = APNSCertificate(certPath: filePathCrt, keyPath: filePathKey)
-        self.push = APNS(withCerts: cert)
+        
+        pushNotifications = PushNotifications(bluemixRegion: bluemixRegion, bluemixAppGuid: bluemixAppGuid, bluemixAppSecret: bluemixAppSecret)
     }
     
     public func configure(router: Router, channelName: String, botProtocolMessageNotificationHandler: @escaping BotInternalMessageNotificationHandler) {
@@ -54,9 +52,20 @@ public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
     //
     /// - Parameter recipientId: is the ios device push Token to send the Push Notification.
     public func sendTextMessage(recipientId: String, messageText: String, context: [String: Any]?) {
-        let payload = APNSPayload(withText: messageText, ttl: 0, topic: topic, priority: .high)
         
-        push.send(payload: payload, to: recipientId)
+        let apnsSetting = Notification.Settings.Apns(badge: 1, category: nil, iosActionKey: nil, sound: "default", type: ApnsType.DEFAULT, payload: nil)
+        let target = Notification.Target(deviceIds: [recipientId], userIds: nil, platforms: [TargetPlatform.Apple], tagNames: nil)
+        let message = Notification.Message(alert: messageText, url: nil)
+        
+        
+        let notification = Notification(message: message, target: target, apnsSettings: apnsSetting, gcmSettings: nil)
+        
+        pushNotifications.send(notification: notification) { (error) in
+            if error != nil {
+                Log.debug("Failed to send push notification. Error: \(error!)")
+                print("Failed to send push notification. Error: \(error!)")
+            }
+        }
     }
     
     
@@ -97,7 +106,7 @@ public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
                     //Send JSON response for responseMessage
                     var jsonResponse = JSON([:])
                     jsonResponse["responseMessage"].stringValue = responseMessage
-
+                    
                     if let realContext = responseContext {
                         jsonResponse["context"].dictionaryObject = realContext
                     }
@@ -107,9 +116,9 @@ public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
                 else {
                     try response.status(.OK).end()
                 }
-
+                
                 return
-            
+                
             } else {
                 Log.debug("Webhook received NO Valid data")
                 print("Webhook received NO Valid data")
@@ -118,7 +127,7 @@ public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
         
         try response.status(.notAcceptable).end()
     }
-
+    
 }
 
 
