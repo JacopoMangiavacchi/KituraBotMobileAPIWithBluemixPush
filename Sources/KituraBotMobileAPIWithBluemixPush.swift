@@ -21,13 +21,12 @@ import BluemixPushNotifications
 /// for more information.
 public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
     public var channelName: String?
-    
+
     private var botProtocolMessageNotificationHandler: BotInternalMessageNotificationHandler?
     private let securityToken: String
     private let webHookPath: String
     
     private let pushNotifications: PushNotifications
-    
     
     
     /// Initialize a `KituraBotMobileAPIWithBluemixPush` instance.
@@ -37,7 +36,7 @@ public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
     public init(securityToken: String, webHookPath: String, bluemixRegion: String, bluemixAppGuid: String, bluemixAppSecret: String) {
         self.securityToken = securityToken
         self.webHookPath = webHookPath
-        
+
         pushNotifications = PushNotifications(bluemixRegion: bluemixRegion, bluemixAppGuid: bluemixAppGuid, bluemixAppSecret: bluemixAppSecret)
     }
     
@@ -48,18 +47,17 @@ public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
         router.post(webHookPath, handler: processRequestHandler)
     }
     
-    //Send a text message using the internal Send API.
-    //
+    ///Send a text message using the internal Send API.
+    ///
     /// - Parameter recipientId: is the ios device push Token to send the Push Notification.
-    public func sendTextMessage(recipientId: String, messageText: String, context: [String: Any]?) {
+    public func sendMessage(_ message: KituraBotMessage) {
+        let target = Notification.Target(deviceIds: [message.user.userId], userIds: nil, platforms: [TargetPlatform.Apple], tagNames: nil)
+        let notificationMessage = Notification.Message(alert: message.messageText, url: nil)
         
-        let apnsSetting = Notification.Settings.Apns(badge: 1, category: nil, iosActionKey: nil, sound: "default", type: ApnsType.DEFAULT, payload: nil)
-        let target = Notification.Target(deviceIds: [recipientId], userIds: nil, platforms: [TargetPlatform.Apple], tagNames: nil)
-        let message = Notification.Message(alert: messageText, url: nil)
-        
-        
-        let notification = Notification(message: message, target: target, apnsSettings: apnsSetting, gcmSettings: nil)
-        
+        let apnsSetting = Notification.Settings.Apns(badge: 1, category: nil, iosActionKey: nil, sound: "default", type: ApnsType.DEFAULT, payload: ["messageId" : message.messageId])
+
+        let notification = Notification(message: notificationMessage, target: target, apnsSettings: apnsSetting, gcmSettings: nil)
+
         pushNotifications.send(notification: notification) { (error) in
             if error != nil {
                 Log.debug("Failed to send push notification. Error: \(error!)")
@@ -102,12 +100,16 @@ public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
                 
                 let context = json["context"].dictionaryObject
                 
-                if let (responseMessage, responseContext) = botProtocolMessageNotificationHandler?(channelName!, senderID, msgText, context) {
+                let sender = KituraBotUser(userId: senderID, channel: channelName!)
+                
+                let message = KituraBotMessage(messageType: .request, user: sender, messageText: msgText, context: context)
+                
+                if let responseMessage = botProtocolMessageNotificationHandler?(message) {
                     //Send JSON response for responseMessage
                     var jsonResponse = JSON([:])
-                    jsonResponse["responseMessage"].stringValue = responseMessage
-                    
-                    if let realContext = responseContext {
+                    jsonResponse["responseMessage"].stringValue = responseMessage.messageText
+
+                    if let realContext = responseMessage.context {
                         jsonResponse["context"].dictionaryObject = realContext
                     }
                     
@@ -116,9 +118,9 @@ public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
                 else {
                     try response.status(.OK).end()
                 }
-                
+
                 return
-                
+            
             } else {
                 Log.debug("Webhook received NO Valid data")
                 print("Webhook received NO Valid data")
@@ -127,7 +129,7 @@ public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
         
         try response.status(.notAcceptable).end()
     }
-    
+
 }
 
 
