@@ -51,7 +51,7 @@ public class KituraBotMobileAPIWithBluemixPush : KituraBotProtocol {
     ///
     /// - Parameter recipientId: is the ios device push Token to send the Push Notification.
     public func sendMessage(_ message: KituraBotMessage) {
-        let target = Notification.Target(deviceIds: [message.user.userId], userIds: nil, platforms: [TargetPlatform.Apple], tagNames: nil)
+        let target = Notification.Target(deviceIds: [message.user.userId], userIds: nil, platforms: nil, tagNames: nil)
         let notificationMessage = Notification.Message(alert: message.messageText, url: nil)
         
         let apnsSetting = Notification.Settings.Apns(badge: 1, category: nil, iosActionKey: nil, sound: "default", type: ApnsType.DEFAULT, payload: ["messageId" : message.messageId])
